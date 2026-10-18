@@ -16,6 +16,9 @@ from .conftest import (
 )
 
 OPTS = CensorOptions(block_size=12, padding=0.1)
+# Mean absolute difference that re-encoding the noisy synthetic texture can cause on its
+# own. ffmpeg builds differ: 5.8 on macOS arm64, 6.01 on the Linux CI runners.
+REENCODE_NOISE = 8
 
 
 def censored_everywhere(out_frames, src_frames, slack: float = 0.15) -> list[int]:
@@ -53,7 +56,7 @@ def test_censor_video_keeps_frames_audio_and_size(tmp_path, sample_video):
     # Background far from the object is preserved (only re-encoding noise).
     for out, src in zip(out_frames, src_frames, strict=True):
         diff = np.abs(out[150:].astype(int) - src[150:].astype(int)).mean()
-        assert diff < 6
+        assert diff < REENCODE_NOISE
 
 
 def test_missed_frame_is_covered_by_hold_without_tracking(tmp_path, sample_video):
@@ -131,8 +134,11 @@ def test_frames_without_object_are_untouched(tmp_path):
     dst = tmp_path / "plain_out.mp4"
     result = censor_video(src, dst, ColorDetector(), OPTS, VideoOptions())
     assert result.frames == 8
+    whole = (0, 0, 320, 240)
     for out, ref in zip(read_all_frames(dst), read_all_frames(src), strict=True):
-        assert np.abs(out.astype(int) - ref.astype(int)).mean() < 6  # re-encoding noise only
+        # A mosaic would flatten the texture (detail ratio near 0); re-encoding keeps ~0.99.
+        assert detail(out, whole, inset=0) > 0.9 * detail(ref, whole, inset=0)
+        assert np.abs(out.astype(int) - ref.astype(int)).mean() < REENCODE_NOISE
 
 
 def test_detect_video_only_runs_detector(sample_video):
