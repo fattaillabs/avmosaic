@@ -3,12 +3,12 @@
 Detect explicit regions in images and videos and cover them with a mosaic — from the
 command line or from Python, on Windows, macOS and Linux.
 
-![original · detection boxes (--draw-boxes) · mosaic](docs/demo.jpg)
+![original · detection boxes (--draw-boxes) · mosaic](https://raw.githubusercontent.com/fattaillabs/avmosaic/main/docs/demo.jpg)
 
 *Demo uses the `faces` preset on a public-domain NASA portrait; the default preset
 censors genitalia and the anus.*
 
-**English** · [한국어](README.ko.md) · [日本語](README.ja.md)
+**English** · [한국어](https://github.com/fattaillabs/avmosaic/blob/main/README.ko.md) · [日本語](https://github.com/fattaillabs/avmosaic/blob/main/README.ja.md)
 
 > **Automated detection is an aid, not a guarantee.** The detector will miss regions
 > (unusual angles, close-ups, occlusion, lighting) and will sometimes censor the wrong
@@ -181,7 +181,7 @@ avmosaic "some video.mp4" --draw-boxes --report report.json   # then watch the r
 avmosaic frames "some video.mp4" -o ./frames --every 2           # label + eval regions
 ```
 
-More about test data and private samples: [tests/data/README.md](tests/data/README.md).
+More about test data and private samples: [tests/data/README.md](https://github.com/fattaillabs/avmosaic/blob/main/tests/data/README.md).
 
 ## Benchmarking on NPDI / Pornography-2k
 
@@ -272,7 +272,7 @@ The tests use no explicit material.
   as an end-to-end check.
 - **Your own accuracy check:** put labelled images in a private folder (never commit them)
   and run `AVMOSAIC_SAMPLES=/path/to/samples pytest tests/test_samples.py -v`. See
-  [tests/test_samples.py](tests/test_samples.py) for the label format.
+  [tests/test_samples.py](https://github.com/fattaillabs/avmosaic/blob/main/tests/test_samples.py) for the label format.
 
 CI runs the suite on Linux, macOS and Windows with Python 3.10, 3.12 and 3.14.
 
@@ -289,5 +289,5 @@ CI runs the suite on Linux, macOS and Windows with Python 3.10, 3.12 and 3.14.
 
 ## License
 
-MIT for this project's code — see [LICENSE](LICENSE). Third-party components, including
-an important note about NudeNet's license, are listed in [NOTICE](NOTICE).
+MIT for this project's code — see [LICENSE](https://github.com/fattaillabs/avmosaic/blob/main/LICENSE). Third-party components, including
+an important note about NudeNet's license, are listed in [NOTICE](https://github.com/fattaillabs/avmosaic/blob/main/NOTICE).
