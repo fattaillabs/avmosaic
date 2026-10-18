@@ -21,16 +21,34 @@
 
 ## インストール
 
+```bash
+pip install avmosaic
+```
+
+コマンドラインツールを他の Python パッケージと分けておきたい場合は `pipx install avmosaic` を使ってください。
+
 Python 3.10 以上が必要です。ffmpeg は `imageio-ffmpeg` に含まれているため、別途インストールは不要です。Intel Mac の場合、最近の ONNX Runtime は Intel Mac 向けのパッケージを配布していないため、お使いの Python のバージョンに合う古い ONNX Runtime がある場合にのみインストールできます（Intel Mac の Python 3.14 向けはありません）。
+
+GPU（任意）：avmosaic は CPU 版の ONNX Runtime をインストールします。GPU を使うには対応する版に入れ替え、`--device cuda` または `--device directml` を指定します。
+
+```bash
+pip uninstall -y onnxruntime
+pip install onnxruntime-gpu          # NVIDIA CUDA（Linux、Windows）
+# または: pip install onnxruntime-directml   （Windows、GPU 全般）
+```
+
+avmosaic をアップグレードすると CPU 版が戻ることがあります。`--device cuda` で CUDA が見つからないと表示されたら、入れ替えをやり直してください。デフォルトの `--device auto` は CUDA → DirectML → CoreML（Apple シリコンでは標準インストールに含まれます）→ CPU の順に選びます。
+
+開発用にソースからインストールする場合：
 
 ```bash
 git clone https://github.com/fattaillabs/avmosaic && cd avmosaic
-pip install .            # 開発用: pip install -e ".[dev]"
+pip install -e ".[dev]"
 ```
 
-GPU（任意）：`onnxruntime` の代わりに `onnxruntime-gpu`（NVIDIA CUDA）または `onnxruntime-directml`（Windows、GPU 全般）をインストールし、`--device cuda` / `--device directml` を指定します。デフォルトの `--device auto` は CUDA → DirectML → CoreML（Apple）→ CPU の順に選びます。
-
 ## クイックスタート
+
+`pip install avmosaic` でインストールしたら：
 
 ```bash
 avmosaic video.mp4                    # -> video_censored.mp4
@@ -154,6 +172,7 @@ censor_video("in.mp4", "out.mp4", detector, CensorOptions(), VideoOptions(hold=8
 ## テスト
 
 ```bash
+git clone https://github.com/fattaillabs/avmosaic && cd avmosaic
 pip install -e ".[dev]"
 pytest                    # すべて（約 10 秒）
 pytest -m "not model"     # 実際のモデルを使うテストを除外

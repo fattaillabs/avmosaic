@@ -21,16 +21,34 @@
 
 ## 설치
 
+```bash
+pip install avmosaic
+```
+
+명령줄 도구를 다른 파이썬 패키지와 섞지 않고 따로 두려면 `pipx install avmosaic`을 쓰세요.
+
 파이썬 3.10 이상이 필요합니다. ffmpeg는 `imageio-ffmpeg`에 들어 있어서 따로 설치할 필요가 없습니다. 인텔 맥이라면 주의하세요. 최신 ONNX Runtime은 인텔 맥용 휠을 내지 않아서, 사용 중인 파이썬 버전에 맞는 예전 ONNX Runtime이 있을 때만 설치됩니다(인텔 맥의 파이썬 3.14용은 없음).
+
+GPU(선택): avmosaic은 CPU용 ONNX Runtime을 설치합니다. GPU를 쓰려면 맞는 버전으로 바꾼 뒤 `--device cuda` 또는 `--device directml`을 주세요.
+
+```bash
+pip uninstall -y onnxruntime
+pip install onnxruntime-gpu          # NVIDIA CUDA(리눅스, 윈도우)
+# 또는: pip install onnxruntime-directml   (윈도우, 모든 GPU)
+```
+
+avmosaic을 업그레이드하면 CPU용이 다시 깔릴 수 있습니다. `--device cuda`가 CUDA를 찾지 못한다고 하면 위 과정을 다시 하세요. 기본값 `--device auto`는 CUDA → DirectML → CoreML(애플 실리콘은 기본 설치에 포함) → CPU 순서로 고릅니다.
+
+개발용 소스 설치:
 
 ```bash
 git clone https://github.com/fattaillabs/avmosaic && cd avmosaic
-pip install .            # 개발용: pip install -e ".[dev]"
+pip install -e ".[dev]"
 ```
 
-GPU(선택): `onnxruntime` 대신 `onnxruntime-gpu`(NVIDIA CUDA)나 `onnxruntime-directml`(윈도우, 모든 GPU)을 설치한 뒤 `--device cuda` 또는 `--device directml`을 주면 됩니다. 기본값 `--device auto`는 CUDA → DirectML → CoreML(애플) → CPU 순서로 고릅니다.
-
 ## 빠른 시작
+
+`pip install avmosaic`으로 설치한 뒤:
 
 ```bash
 avmosaic video.mp4                    # -> video_censored.mp4
@@ -186,6 +204,7 @@ censor_video("in.mp4", "out.mp4", detector, CensorOptions(), VideoOptions(hold=8
 ## 테스트
 
 ```bash
+git clone https://github.com/fattaillabs/avmosaic && cd avmosaic
 pip install -e ".[dev]"
 pytest                    # 전체(약 10초)
 pytest -m "not model"     # 실제 모델을 돌리는 테스트 제외

@@ -37,21 +37,40 @@ censors genitalia and the anus.*
 
 ## Install
 
-Python 3.10+ is required. ffmpeg is bundled through `imageio-ffmpeg`, so there is
-nothing else to install. On Intel Macs, note that recent ONNX Runtime releases
-ship no Intel-macOS wheels, so `pip` can only use an older ONNX Runtime, and only if
-one exists for your Python version (Python 3.14 on Intel macOS has none).
+```bash
+pip install avmosaic
+```
+
+To keep the command-line tool in its own environment, use `pipx install avmosaic` instead.
+
+Python 3.10+ is required. ffmpeg comes with `imageio-ffmpeg`, so there is nothing else to
+install. On Intel Macs, note that recent ONNX Runtime releases ship no Intel-macOS wheels,
+so `pip` can only use an older ONNX Runtime, and only if one exists for your Python
+version (Python 3.14 on Intel macOS has none).
+
+GPU (optional): avmosaic installs the CPU build of ONNX Runtime. For a GPU, swap it for
+the matching build, then pass `--device cuda` or `--device directml`:
+
+```bash
+pip uninstall -y onnxruntime
+pip install onnxruntime-gpu          # NVIDIA CUDA (Linux, Windows)
+# or: pip install onnxruntime-directml   (Windows, any GPU)
+```
+
+Upgrading avmosaic can bring the CPU build back; repeat the swap if `--device cuda`
+reports that CUDA is missing. The default `--device auto` picks CUDA, then DirectML, then
+CoreML (included in the standard build on Apple Silicon), then CPU.
+
+From source, for development:
 
 ```bash
 git clone https://github.com/fattaillabs/avmosaic && cd avmosaic
-pip install .            # or: pip install -e ".[dev]" for development
+pip install -e ".[dev]"
 ```
 
-GPU (optional): replace `onnxruntime` with `onnxruntime-gpu` (NVIDIA CUDA) or
-`onnxruntime-directml` (Windows, any GPU), then pass `--device cuda` / `--device directml`.
-The default `--device auto` picks CUDA, then DirectML, then CoreML (Apple), then CPU.
-
 ## Quick start
+
+After `pip install avmosaic`:
 
 ```bash
 avmosaic video.mp4                    # -> video_censored.mp4
@@ -250,6 +269,7 @@ detector, for example a model you trained yourself.
 ## Testing
 
 ```bash
+git clone https://github.com/fattaillabs/avmosaic && cd avmosaic
 pip install -e ".[dev]"
 pytest                    # everything (about 10 s)
 pytest -m "not model"     # skip the tests that run the real model
