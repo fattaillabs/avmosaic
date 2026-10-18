@@ -106,6 +106,20 @@ avmosaic eval summary npdi.jsonl
 3. Too much censored → raise `--threshold`, and check which classes the report says
    were found.
 
+## Recommended settings
+
+These are starting points, not guarantees. Check the result with `--draw-boxes` and adjust.
+
+| Goal | Flags | Notes |
+|---|---|---|
+| Balanced (default) | none | `320n`, `--threshold 0.25`, tracking on |
+| Fewer false alarms | `--threshold 0.32` (or `0.35`) | On 7,783 swimwear photos, false alarms fell from 0.8% at 0.25 to 0.4% at 0.35. On a 12-minute test clip, 0.32 cut the mosaic segments from 59 to 33 and still caught every long segment. |
+| Fewer misses (safety first) | `--threshold 0.15 --model 640m --max-lost 30 --hold 8 --padding 0.25` | Lower bar, bigger model, longer tracking, larger boxes. Slower, and censors more. |
+| Faster | `--detect-every 2` (30 fps video) or `--detect-every 3` (60 fps) | Tracking fills the frames in between. A 1080p clip went from 22.0 s to 16.1 s with `--detect-every 2`. |
+| Coarser mosaic on small videos | `--block-size 2%` | `auto` is max(4 px, 1/100 of the long side), so a 640×360 video gets 7 px tiles. |
+| Also cover breasts | `--classes genitals,breasts` | |
+| Anonymize faces | `--classes faces` | |
+
 ## How tracking works
 
 For each region the detector finds, avmosaic keeps a track and follows it frame by frame
@@ -166,6 +180,8 @@ none. To try it on real footage, you can use a public research dataset such as
 avmosaic "some video.mp4" --draw-boxes --report report.json   # then watch the result
 avmosaic frames "some video.mp4" -o ./frames --every 2           # label + eval regions
 ```
+
+More about test data and private samples: [tests/data/README.md](tests/data/README.md).
 
 ## Benchmarking on NPDI / Pornography-2k
 

@@ -83,6 +83,20 @@ avmosaic eval summary npdi.jsonl
 2. 놓친 부위가 있으면 `--threshold`를 낮추고(예: `0.15`), `--model 640m`을 써 보고, `--hold`와 `--padding`을 키웁니다.
 3. 너무 많이 가리면 `--threshold`를 올리고, 리포트에서 어떤 클래스가 잡혔는지 확인합니다.
 
+## 권장 설정
+
+보장값이 아니라 출발점입니다. `--draw-boxes`로 결과를 확인하며 조정하세요.
+
+| 목적 | 옵션 | 참고 |
+|---|---|---|
+| 균형(기본값) | 없음 | `320n`, `--threshold 0.25`, 추적 켬 |
+| 오탐 줄이기 | `--threshold 0.32`(또는 `0.35`) | 수영복 사진 7,783장에서 오탐이 0.25일 때 0.8%, 0.35일 때 0.4%였습니다. 12분짜리 시험 영상에서는 0.32로 모자이크 구간이 59개에서 33개로 줄었고, 긴 구간은 모두 그대로 잡혔습니다. |
+| 놓침 줄이기(안전 우선) | `--threshold 0.15 --model 640m --max-lost 30 --hold 8 --padding 0.25` | 낮은 문턱, 큰 모델, 긴 추적, 넓은 박스. 느리고 더 많이 가립니다. |
+| 빠르게 | `--detect-every 2`(30fps 영상) 또는 `--detect-every 3`(60fps) | 사이 프레임은 추적이 채웁니다. 1080p 영상이 `--detect-every 2`로 22.0초에서 16.1초가 됐습니다. |
+| 저해상도 영상에서 모자이크 굵게 | `--block-size 2%` | `auto`는 max(4px, 긴 변의 1/100)이라 640×360 영상은 7px 타일이 됩니다. |
+| 가슴도 가리기 | `--classes genitals,breasts` | |
+| 얼굴 익명화 | `--classes faces` | |
+
 ## 추적 방식
 
 탐지기가 찾은 부위마다 트랙을 만들고, median-flow 광학 흐름으로 프레임마다 따라갑니다. 박스 안 격자 점을 루카스–카나데 방식으로 추적하고, 앞뒤 방향 오차로 잘못 추적한 점을 걸러 냅니다. 덜 가리기보다 더 가리는 쪽으로 설계했습니다.
@@ -117,6 +131,8 @@ avmosaic은 노출 자료를 포함하거나 호스팅하거나 배포하지 않
 avmosaic "영상.mp4" --draw-boxes --report report.json   # 결과를 직접 보며 확인
 avmosaic frames "영상.mp4" -o ./frames --every 2         # 라벨링 + 위치 판정
 ```
+
+테스트 데이터와 개인 샘플 안내: [tests/data/README.md](tests/data/README.md)
 
 ## NPDI·Pornography-2k로 성능 측정
 
