@@ -1,0 +1,26 @@
+avmosaic — third-party components
+===================================
+
+This repository contains only avmosaic's own source code (MIT, see LICENSE),
+one public-domain test image, and a demo image derived from it. The components
+below are installed separately as Python packages or downloaded at runtime; they
+are not vendored here and keep their own licenses.
+
+NudeNet (detector models: 320n.onnx, 640m.onnx)
+  https://github.com/notAI-tech/NudeNet
+  IMPORTANT: the PyPI package "nudenet" 3.4.x declares the MIT license, but the
+  GitHub repository (which also hosts the 640m weights) is licensed AGPL-3.0.
+  If you redistribute avmosaic together with NudeNet or its weights, or offer
+  it as a network service, check which license applies to you. A detector of
+  your own can be plugged in through the Python API instead.
+
+ONNX Runtime — MIT — https://github.com/microsoft/onnxruntime
+OpenCV (opencv-python-headless) — Apache-2.0 — https://github.com/opencv/opencv-python
+NumPy — BSD-3-Clause — https://numpy.org
+imageio-ffmpeg — BSD-2-Clause — https://github.com/imageio/imageio-ffmpeg
+  Its wheels include an ffmpeg binary, which is a separate program under the
+  (L)GPL and is run as a subprocess.
+
+tests/data/astronaut.jpg, docs/demo.jpg
+  Portrait of astronaut Eileen Collins, NASA, public domain (the same image as
+  scikit-image's data.astronaut()).
