@@ -184,3 +184,33 @@ def test_statue_clip_is_covered_in_every_frame(model_path):
     assert min(coverage) >= 0.8, coverage
     assert np.mean(coverage) >= 0.9
     assert max(stray) <= 0.01, stray
+
+
+class _FailingSession:
+    def __init__(self, real, providers):
+        self._real, self._providers = real, providers
+
+    def get_providers(self):
+        return self._providers
+
+    def get_inputs(self):
+        return self._real.get_inputs()
+
+    def run(self, *args, **kwargs):
+        raise RuntimeError("Error executing model: Error in building plan.")
+
+
+def test_accelerator_failure_falls_back_to_cpu(model_path):
+    det = NudeNetDetector(model_path, classes=["FACE_FEMALE"])
+    det._session = _FailingSession(det._session, ["CoreMLExecutionProvider", "CPUExecutionProvider"])
+    with pytest.warns(RuntimeWarning, match="CoreMLExecutionProvider failed .*continuing on CPU"):
+        (face,) = det.detect(read_image(ASTRONAUT))
+    assert face.label == "FACE_FEMALE"
+    assert det.providers == ["CPUExecutionProvider"]
+
+
+def test_cpu_failure_is_not_hidden(model_path):
+    det = NudeNetDetector(model_path)
+    det._session = _FailingSession(det._session, ["CPUExecutionProvider"])
+    with pytest.raises(RuntimeError, match="building plan"):
+        det.detect(read_image(ASTRONAUT))

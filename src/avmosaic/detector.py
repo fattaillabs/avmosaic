@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import warnings
 from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
@@ -119,8 +120,6 @@ class NudeNetDetector:
         providers: Sequence[str] | None = None,
         channels: str = "rgb",
     ):
-        import onnxruntime
-
         if not 0.0 < threshold <= 1.0:
             raise ValueError("threshold must be in (0, 1]")
         if not 0.0 < nms_iou <= 1.0:
@@ -129,15 +128,9 @@ class NudeNetDetector:
             raise ValueError("resolution must be a positive multiple of 32")
         if channels not in CHANNEL_ORDERS:
             raise ValueError(f"channels must be one of {CHANNEL_ORDERS}")
-        options = onnxruntime.SessionOptions()
-        options.log_severity_level = 3
-        self._session = onnxruntime.InferenceSession(
-            str(model_path),
-            sess_options=options,
-            providers=list(providers or ["CPUExecutionProvider"]),
-        )
-        self._input_name = self._session.get_inputs()[0].name
         self.model_path = Path(model_path)
+        self._session = self._open(providers or ["CPUExecutionProvider"])
+        self._input_name = self._session.get_inputs()[0].name
         self.classes = tuple(classes) if classes else LABELS
         unknown = [c for c in self.classes if c not in LABELS]
         if unknown:
@@ -147,6 +140,15 @@ class NudeNetDetector:
         self.nms_iou = nms_iou
         self.resolution = resolution
         self.channels = channels
+
+    def _open(self, providers: Sequence[str]):
+        import onnxruntime
+
+        options = onnxruntime.SessionOptions()
+        options.log_severity_level = 3
+        return onnxruntime.InferenceSession(
+            str(self.model_path), sess_options=options, providers=list(providers)
+        )
 
     @property
     def providers(self) -> list[str]:
@@ -167,7 +169,19 @@ class NudeNetDetector:
     def detect(self, image: np.ndarray) -> list[Detection]:
         h, w = image.shape[:2]
         blob, scale = self.preprocess(image)
-        output = self._session.run(None, {self._input_name: blob})[0]
+        try:
+            output = self._session.run(None, {self._input_name: blob})[0]
+        except Exception as exc:
+            # An accelerator can fail at run time even though the session opened, e.g.
+            # CoreML cannot build a plan for 640m at --resolution 1280. Finish on CPU.
+            accelerator = self.providers[0]
+            if accelerator == "CPUExecutionProvider":
+                raise
+            reason = str(exc).strip().splitlines()[-1][:160]
+            warnings.warn(f"{accelerator} failed ({reason}); continuing on CPU",
+                          RuntimeWarning, stacklevel=2)
+            self._session = self._open(["CPUExecutionProvider"])
+            output = self._session.run(None, {self._input_name: blob})[0]
         return self.postprocess(output[0], scale, w, h)
 
     def postprocess(self, output: np.ndarray, scale: float, width: int, height: int) -> list[Detection]:
