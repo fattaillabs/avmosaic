@@ -16,7 +16,7 @@ from .detector import CHANNEL_ORDERS, DEVICES, Detection, create_detector, resol
 from .image import IMAGE_EXTS, censor_image, detect_image, write_image
 from .labels import DEFAULT_CLASSES, LABELS, PRESETS, parse_classes
 from .models import DEFAULT_MODEL, MODELS, cache_dir, download_model, find_model
-from .tracking import ManualRegion
+from .tracking import ManualRegion, seconds
 from .video import VIDEO_EXTS, VideoOptions, censor_video, detect_video
 
 COMMANDS = ("censor", "detect", "eval", "frames", "label", "classes", "models")
@@ -168,6 +168,8 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("-o", "--output", required=True, help="folder for the images")
     p.add_argument("--every", type=float, default=2.0,
                    help="seconds between frames (default: %(default)s)")
+    p.add_argument("--start", default="0", help="first time to save, seconds or m:ss (default: 0)")
+    p.add_argument("--end", default=None, help="stop at this time (default: the end)")
 
     p = sub.add_parser("label", help="mark the regions that must be censored, in your browser")
     p.add_argument("folder", help="folder of images; boxes are saved as <name>.json next to them")
@@ -408,6 +410,8 @@ def cmd_censor(args) -> int:
                                     manual=[m.box for m in manual])
                 record["detections"] = [d.to_dict() for d in dets]
                 summary = f"{len(dets)} region(s)"
+                if manual:
+                    summary = f"{len(dets)} detected, {len(manual)} marked"
             else:
                 frames: list[tuple[int, float, list[Detection]]] = []
                 progress = Progress("never" if args.quiet else args.progress)
@@ -425,6 +429,8 @@ def cmd_censor(args) -> int:
                               detections=_frames_record(frames))
                 summary = f"{result.frames} frames, regions found in {hits} of " \
                           f"{result.detection_frames} checked"
+                if manual:
+                    summary += f", {len(manual)} marked region(s)"
                 if result.audio_reencoded:
                     summary += ", audio re-encoded to AAC"
         except KeyboardInterrupt:
@@ -568,6 +574,13 @@ def _eval_regions(args) -> int:
 def cmd_frames(args) -> int:
     if args.every <= 0:
         raise UsageError("--every must be > 0")
+    try:
+        start = seconds(args.start)
+        end = None if args.end is None else seconds(args.end)
+    except ValueError as exc:
+        raise UsageError(str(exc)) from None
+    if end is not None and end <= start:
+        raise UsageError("--end must be after --start")
     out = Path(args.output)
     out.mkdir(parents=True, exist_ok=True)
     total = 0
@@ -575,7 +588,7 @@ def cmd_frames(args) -> int:
         if media_kind(video) != "video":
             continue
         count = 0
-        for t, frame in evaluate.sample_frames(video, 1.0 / args.every):
+        for t, frame in evaluate.sample_frames(video, 1.0 / args.every, start, end):
             write_image(out / f"{video.stem}_{round(t * 1000):08d}ms.jpg", frame)
             count += 1
         print(f"{video}: {count} frame(s)", file=sys.stderr)

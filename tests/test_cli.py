@@ -251,3 +251,9 @@ def test_add_region_on_a_video_time_range(tmp_path, fake_model):
     box = (96, 60, 192, 156)
     flattened = [detail(o, box) < 0.3 * detail(s, box) for o, s in zip(out, src, strict=True)]
     assert flattened == [6 <= i <= 18 for i in range(30)]  # 0.2 s to 0.6 s at 30 fps
+
+
+def test_summary_counts_marked_regions(tmp_path, fake_model, capsys):
+    write_image(tmp_path / "plain.png", background(80, 100))
+    assert cli.main([str(tmp_path / "plain.png"), "--add-region", "10,10,40,40"]) == 0
+    assert "0 detected, 1 marked" in capsys.readouterr().err

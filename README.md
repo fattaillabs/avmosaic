@@ -78,6 +78,7 @@ avmosaic photo.jpg -o out.jpg
 avmosaic ./scenes -o ./censored       # whole folder, structure mirrored
 avmosaic video.mp4 --model 640m --detect-every 2 --hold 8
 avmosaic photo.jpg --draw-boxes       # see what was detected and how confident it was
+avmosaic video.mp4 --add-region 2.3-3.9:190,340,275,430   # also cover a region the detector misses
 avmosaic detect video.mp4 -o detections.json   # detect only, no output media
 avmosaic classes                      # list classes and presets
 avmosaic models download 640m         # fetch the bigger model ahead of time
@@ -141,6 +142,42 @@ These are starting points, not guarantees. Check the result with `--draw-boxes` 
 | Anonymize faces | `--classes faces` | |
 | Something the detector misses | `--add-region 2.3-3.9:190,340,275,430` | Mark it once where it first appears and optical flow follows it. Read the coordinates off a frame, e.g. one saved with `avmosaic frames`. |
 
+## Marking regions the detector misses
+
+Sometimes the detector never finds a region: nudity on a phone screen, monitor or poster,
+a heavily blurred shot, an unusual angle. Lowering `--threshold` does not help when the
+model gives it almost no score. Mark such a region once and avmosaic follows it.
+
+1. **Find when and where it is.** Watch the output; `--draw-boxes` shows what was found.
+   For exact numbers, save frames around that moment and mark the region in the label
+   page:
+
+   ```bash
+   avmosaic frames video.mp4 -o ./frames --start 2 --end 4 --every 0.1   # video_00002300ms.jpg = the frame at 2.3 s
+   avmosaic label ./frames                              # drag a box; it is saved as video_00002300ms.json
+   ```
+
+   The JSON holds `[x1, y1, x2, y2]` in video pixels.
+
+2. **Add it.** Give the time range and the box at the start time:
+
+   ```bash
+   avmosaic video.mp4 --add-region 2.3-3.95:190,340,275,430
+   ```
+
+   Times can be seconds (`12.5`), `m:ss` (`1:02.5`) or `h:mm:ss`. Without a time range
+   (`--add-region 190,340,275,430`) the box applies to the whole video, or to an image.
+   Repeat the flag to mark several regions.
+
+3. **Check it.** With `--draw-boxes`, marked regions are labelled `MANUAL`. If the box
+   slips (fast motion, rotation, the region leaving the frame), split the range where it
+   slips and mark it again, e.g.
+   `--add-region 2.3-3.4:190,340,275,430 --add-region 3.4-3.95:150,140,270,330`.
+
+A marked region stays until its end time even when nothing is detected, is never merged
+with detections, follows the region's motion and scale with optical flow, and holds its
+place across a scene cut. With `--tracking off` it stays where you put it.
+
 ## How tracking works
 
 For each region the detector finds, avmosaic keeps a track and follows it frame by frame
@@ -157,8 +194,11 @@ check). The tracker is built to cover too much rather than too little:
   straight path between the two detections. The box also grows 1% per frame without a
   detection, up to +50%.
 - **Before the first detection**: a new track is followed backwards over `--hold` frames.
-- **Scene cuts**: these end all tracks and force a detection. Nothing is carried across
-  the cut.
+- **Scene cuts**: these end all detector tracks and force a detection. Nothing is carried
+  across the cut.
+- **Marked regions** (`--add-region`) are tracks of their own. They follow optical flow from
+  their start to their end time whatever the detector does, and hold their place across a
+  scene cut.
 
 Frames are rendered with a look-ahead of `max(--max-lost, --hold, --smooth,
 --detect-every − 1)` frames. At the defaults that is 15 frames, or about 100 MB at 1080p.

@@ -46,14 +46,20 @@ def subset_for(path: Path) -> str | None:
     return None
 
 
-def sample_frames(path: str | Path, fps: float) -> Iterator[tuple[float, np.ndarray]]:
-    reader = imageio_ffmpeg.read_frames(str(path), pix_fmt="bgr24",
-                                        output_params=["-vf", f"fps={fps:g}"])
+def sample_frames(path: str | Path, fps: float, start: float = 0.0,
+                  end: float | None = None) -> Iterator[tuple[float, np.ndarray]]:
+    """Yield (time in the video, frame) at ``fps`` frames per second from ``start`` to ``end``."""
+    input_params = ["-ss", f"{start:.3f}"] if start > 0 else []  # seek before decoding
+    output_params = ["-vf", f"fps={fps:g}"]
+    if end is not None:
+        output_params += ["-t", f"{end - start:.3f}"]
+    reader = imageio_ffmpeg.read_frames(str(path), pix_fmt="bgr24", input_params=input_params,
+                                        output_params=output_params)
     try:
         meta = next(reader)
         width, height = meta["size"]
         for k, raw in enumerate(reader):
-            yield k / fps, np.frombuffer(raw, np.uint8).reshape(height, width, 3)
+            yield start + k / fps, np.frombuffer(raw, np.uint8).reshape(height, width, 3)
     finally:
         reader.close()
 

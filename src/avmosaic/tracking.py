@@ -96,13 +96,13 @@ class ManualRegion:
         if not when:
             return cls((x1, y1, x2, y2))
         start_text, _, end_text = when.partition("-")
-        start, end = _seconds(start_text), _seconds(end_text)
+        start, end = seconds(start_text), seconds(end_text)
         if end <= start:
             raise ValueError(f"invalid region {text!r}: the end time must be after the start")
         return cls((x1, y1, x2, y2), start, end)
 
 
-def _seconds(text: str) -> float:
+def seconds(text: str) -> float:
     try:
         parts = [float(p) for p in text.strip().split(":")]
     except ValueError:

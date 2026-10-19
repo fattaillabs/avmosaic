@@ -179,3 +179,19 @@ def test_frames_command(tmp_path):
                      "--every", "1"]) == 0
     names = sorted(p.name for p in (tmp_path / "f").iterdir())
     assert names == ["clip_00000000ms.jpg", "clip_00001000ms.jpg", "clip_00002000ms.jpg"]
+
+
+def test_frames_time_range_keeps_video_times_in_names(tmp_path):
+    make_video(tmp_path / "clip.mp4", frames=90, audio=False)  # 3 s at 30 fps
+    assert cli.main(["frames", str(tmp_path / "clip.mp4"), "-o", str(tmp_path / "f"),
+                     "--start", "1", "--end", "0:02", "--every", "0.5"]) == 0
+    names = sorted(p.name for p in (tmp_path / "f").iterdir())
+    assert names == ["clip_00001000ms.jpg", "clip_00001500ms.jpg"]
+
+
+def test_frames_rejects_an_empty_range(tmp_path, capsys):
+    make_video(tmp_path / "clip.mp4", frames=10, audio=False)
+    with pytest.raises(SystemExit):
+        cli.main(["frames", str(tmp_path / "clip.mp4"), "-o", str(tmp_path / "f"),
+                  "--start", "2", "--end", "1"])
+    assert "--end must be after --start" in capsys.readouterr().err
