@@ -289,7 +289,9 @@ The tests use no explicit material.
   at 8 px/frame and 1.14× at 25 px/frame. `--tracking off` censors 2.70× and 5.48×.
 - **Model tests** run the real NudeNet model. They check that its output matches upstream
   `nudenet` exactly in BGR mode, and use the model's *face* class on a public-domain photo
-  as an end-to-end check.
+  as an end-to-end check. A 3-second clip made from a CC0 photo of Michelangelo's David
+  checks the real model and tracking against a hand-marked region in every frame
+  (see [tests/data/README.md](https://github.com/fattaillabs/avmosaic/blob/main/tests/data/README.md)).
 - **Your own accuracy check:** put labelled images in a private folder (never commit them)
   and run `AVMOSAIC_SAMPLES=/path/to/samples pytest tests/test_samples.py -v`. See
   [tests/test_samples.py](https://github.com/fattaillabs/avmosaic/blob/main/tests/test_samples.py) for the label format.

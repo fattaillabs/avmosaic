@@ -2,17 +2,24 @@
 
 Faces are a class of the same detector, so a public-domain portrait (NASA's
 astronaut photo, ``tests/data/astronaut.jpg``) exercises the whole real
-detection path without any explicit material.
+detection path without any explicit material. A short clip made from a CC0 photo
+of Michelangelo's David (``tests/data/david_statue.mp4``) checks the real model
+and tracking on the region the tool is for.
 """
+
+import json
 
 import numpy as np
 import pytest
 
 from avmosaic import cli
+from avmosaic.censor import build_mask, expand_box
 from avmosaic.detector import NudeNetDetector, create_detector, resolve_providers
 from avmosaic.image import read_image
-from avmosaic.labels import LABELS
+from avmosaic.labels import LABELS, parse_classes
 from avmosaic.models import MODELS, bundled_path, find_model, sha256_of
+from avmosaic.tracking import TrackingPlanner, TrackOptions
+from avmosaic.video import iter_frames, probe
 
 from .conftest import DATA, background, flat_tiles
 
@@ -143,3 +150,37 @@ def test_640m_finds_the_face():
     assert det.resolution == 640
     (face,) = det.detect(read_image(ASTRONAUT))
     assert iou((face.x1, face.y1, face.x2, face.y2), FACE) > 0.8
+
+
+def test_statue_clip_is_covered_in_every_frame(model_path):
+    """A generated camera move over a CC0 photo of David: the real model plus tracking
+    keeps the hand-marked region covered in every frame and censors nothing else.
+
+    Marble is outside what NudeNet was trained on; it reports the statue's groin mostly
+    as FEMALE_GENITALIA_COVERED, so that class is added to the default preset here.
+    """
+    clip = DATA / "david_statue.mp4"
+    truth = json.loads((DATA / "david_statue.json").read_text())["boxes"]
+    info = probe(clip)
+    detector = NudeNetDetector(model_path, classes=parse_classes("genitals,FEMALE_GENITALIA_COVERED"))
+    planner = TrackingPlanner(1, TrackOptions())
+    planned = {}
+    for i, frame in enumerate(iter_frames(clip, info)):
+        for index, _, regions in planner.push(i, frame, lambda _i, image: detector.detect(image)):
+            planned[index] = regions
+    for index, _, regions in planner.flush():
+        planned[index] = regions
+    assert len(planned) == len(truth) == 45
+
+    w, h = info.width, info.height
+    coverage, stray = [], []
+    for i, box in enumerate(truth):
+        x1, y1, x2, y2 = (int(v) for v in box)
+        mask = build_mask(h, w, [expand_box(r, 0.15, w, h) for r in planned[i]]) > 0
+        coverage.append(float(mask[y1:y2, x1:x2].mean()))
+        near = np.zeros_like(mask)
+        near[max(0, y1 - 40):y2 + 40, max(0, x1 - 40):x2 + 40] = True
+        stray.append(float((mask & ~near).mean()))
+    assert min(coverage) >= 0.8, coverage
+    assert np.mean(coverage) >= 0.9
+    assert max(stray) <= 0.01, stray
