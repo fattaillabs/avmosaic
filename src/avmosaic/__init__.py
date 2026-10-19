@@ -1,6 +1,6 @@
 """avmosaic: detect explicit regions in images and videos and cover them with a mosaic."""
 
-__version__ = "0.1.1"
+__version__ = "0.1.2"
 
 from .censor import CensorOptions, apply_censor  # noqa: E402
 from .detector import Detection, NudeNetDetector, create_detector  # noqa: E402
