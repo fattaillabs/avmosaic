@@ -221,3 +221,33 @@ def test_progress_flag_reaches_video_runs(tmp_path, fake_model, capsys):
     make_video(tmp_path / "clip.mp4", frames=6, audio=False)
     assert cli.main([str(tmp_path / "clip.mp4"), "--progress", "always"]) == 0
     assert "frames" in capsys.readouterr().err
+
+
+def test_add_region_on_an_image(tmp_path, fake_model):
+    write_image(tmp_path / "plain.png", background(160, 200))  # nothing to detect
+    assert cli.main([str(tmp_path / "plain.png"), "-q", "--block-size", "8",
+                     "--padding", "0", "--add-region", "40,40,120,104"]) == 0
+    out = read_image(tmp_path / "plain_censored.png")
+    assert flat_tiles(out, (40, 40, 120, 104), block=8) == 1.0
+    src = read_image(tmp_path / "plain.png")
+    assert (out[120:] == src[120:]).all()
+
+
+def test_timed_region_is_refused_for_images(tmp_path, fake_model, capsys):
+    write_image(tmp_path / "plain.png", background(60, 60))
+    with pytest.raises(SystemExit) as exc:
+        cli.main([str(tmp_path / "plain.png"), "--add-region", "1-2:0,0,10,10"])
+    assert exc.value.code == 2 and "only applies to videos" in capsys.readouterr().err
+
+
+def test_add_region_on_a_video_time_range(tmp_path, fake_model):
+    from .conftest import detail, read_all_frames
+
+    make_video(tmp_path / "plain.mp4", frames=30, audio=False, draw=lambda frame, i: None)
+    assert cli.main([str(tmp_path / "plain.mp4"), "-q", "--block-size", "12", "--padding", "0",
+                     "--add-region", "0.2-0.6:96,60,192,156"]) == 0
+    out = read_all_frames(tmp_path / "plain_censored.mp4")
+    src = read_all_frames(tmp_path / "plain.mp4")
+    box = (96, 60, 192, 156)
+    flattened = [detail(o, box) < 0.3 * detail(s, box) for o, s in zip(out, src, strict=True)]
+    assert flattened == [6 <= i <= 18 for i in range(30)]  # 0.2 s to 0.6 s at 30 fps

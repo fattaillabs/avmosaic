@@ -15,7 +15,7 @@ import numpy as np
 
 from .censor import CensorOptions, apply_censor, draw_detections
 from .detector import Detection, Detector
-from .tracking import HoldPlanner, TrackingPlanner, TrackOptions
+from .tracking import HoldPlanner, ManualRegion, TrackingPlanner, TrackOptions
 
 VIDEO_EXTS = frozenset(
     {".mp4", ".m4v", ".mov", ".mkv", ".avi", ".webm", ".wmv", ".flv", ".ts", ".mpg", ".mpeg"}
@@ -41,6 +41,8 @@ class VideoOptions:
     max_lost: int = 15
     # Tracking on: average box positions over +-N frames.
     smooth: int = 2
+    # Regions a person marked because the detector misses them (see ManualRegion).
+    manual: Sequence[ManualRegion] = field(default_factory=tuple)
     codec: str = "libx264"
     crf: int | None = 18
     preset: str | None = "medium"
@@ -54,11 +56,12 @@ class VideoOptions:
             if getattr(self, name) < 0:
                 raise ValueError(f"{name} must be >= 0")
 
-    def planner(self) -> HoldPlanner | TrackingPlanner:
+    def planner(self, fps: float = 30.0) -> HoldPlanner | TrackingPlanner:
+        manual = [region.frames(fps) for region in self.manual]
         if self.tracking:
             return TrackingPlanner(self.detect_every, TrackOptions(
-                max_lost=self.max_lost, backfill=self.hold, smooth=self.smooth))
-        return HoldPlanner(self.detect_every, self.hold)
+                max_lost=self.max_lost, backfill=self.hold, smooth=self.smooth), manual)
+        return HoldPlanner(self.detect_every, self.hold, manual)
 
     @property
     def reach(self) -> int:
@@ -232,7 +235,7 @@ def censor_video(
 ) -> VideoResult:
     src, dst = Path(src), Path(dst)
     info = probe(src)
-    planner = video_options.planner()
+    planner = video_options.planner(info.fps)
     tmpdir = Path(tempfile.mkdtemp(prefix="avmosaic-"))
     encoder = None
     detected = 0

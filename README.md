@@ -114,6 +114,7 @@ avmosaic eval summary npdi.jsonl
 | `--no-audio` | off | Drop the audio track. Audio is otherwise copied, and converted to AAC when the source codec doesn't belong in MP4 (e.g. PCM). |
 | `--report FILE` | — | Write every detection (per frame for video) as JSON. |
 | `--draw-boxes` | off | Draw boxes, classes and scores on the output. |
+| `--add-region SPEC` | — | Also censor a region the detector misses: `x1,y1,x2,y2` for an image or a whole video, or `START-END:x1,y1,x2,y2` for part of a video (seconds or m:ss). The box is where the region is at START; optical flow follows it until END. Repeatable. |
 | `--progress` | `auto` | Progress: a bar in a terminal (`auto`); `always` also logs a line every 10 s when output goes to a file. |
 | `-o`, `--suffix`, `-y` | — | Output file or folder, suffix used when `-o` is absent, overwrite. |
 
@@ -138,6 +139,7 @@ These are starting points, not guarantees. Check the result with `--draw-boxes` 
 | Coarser mosaic on small videos | `--block-size 2%` | `auto` is max(4 px, 1/100 of the long side), so a 640×360 video gets 7 px tiles. |
 | Also cover breasts | `--classes genitals,breasts` | |
 | Anonymize faces | `--classes faces` | |
+| Something the detector misses | `--add-region 2.3-3.9:190,340,275,430` | Mark it once where it first appears and optical flow follows it. Read the coordinates off a frame, e.g. one saved with `avmosaic frames`. |
 
 ## How tracking works
 
@@ -303,6 +305,10 @@ CI runs the suite on Linux, macOS and Windows with Python 3.10, 3.12 and 3.14.
 - The detector is the main source of error. NudeNet was trained on general nudity
   images. Small regions in large frames, extreme close-ups and partial occlusion are
   hard for it.
+- Nudity shown on a phone screen, monitor or poster, or heavily blurred, is often not
+  detected at all, and lowering `--threshold` does not help (in one test clip the model
+  scored it below 0.05 in every frame). Review the output and mark such regions with
+  `--add-region`.
 - Variable-frame-rate video is converted to a constant rate (this keeps audio in sync).
 - Subtitle and data streams are not copied. Odd video sizes are padded by one pixel for
   H.264.

@@ -16,6 +16,7 @@ from .detector import CHANNEL_ORDERS, DEVICES, Detection, create_detector, resol
 from .image import IMAGE_EXTS, censor_image, detect_image, write_image
 from .labels import DEFAULT_CLASSES, LABELS, PRESETS, parse_classes
 from .models import DEFAULT_MODEL, MODELS, cache_dir, download_model, find_model
+from .tracking import ManualRegion
 from .video import VIDEO_EXTS, VideoOptions, censor_video, detect_video
 
 COMMANDS = ("censor", "detect", "eval", "frames", "label", "classes", "models")
@@ -84,6 +85,10 @@ def build_parser() -> argparse.ArgumentParser:
                    help="for --method fill: black, white, #rrggbb or r,g,b (default: %(default)s)")
     g.add_argument("--draw-boxes", action="store_true",
                    help="draw detection boxes and scores on the output (for tuning)")
+    g.add_argument("--add-region", action="append", default=[], metavar="SPEC",
+                   help="also censor a region the detector misses: x1,y1,x2,y2 (whole image or "
+                        "video) or START-END:x1,y1,x2,y2 (video; seconds or m:ss, followed with "
+                        "optical flow). Repeatable")
     g.add_argument("--jpeg-quality", type=int, default=95, help="(default: %(default)s)")
     g = p.add_argument_group("video")
     _video_detect_args(g)
@@ -336,7 +341,7 @@ def _make_detector(args):
 def _settings(args, detector) -> dict:
     keys = ["classes", "threshold", "nms_iou", "model", "resolution", "device", "channels",
             "method", "block_size", "shape", "padding", "detect_every", "tracking", "hold",
-            "max_lost", "smooth"]
+            "max_lost", "smooth", "add_region"]
     data = {k: getattr(args, k) for k in keys if hasattr(args, k)}
     data["classes"] = list(detector.classes)
     data["resolution"] = detector.resolution
@@ -362,6 +367,7 @@ def cmd_censor(args) -> int:
     if args.output is None and not args.suffix:
         raise UsageError("--suffix must not be empty when -o is not given")
     try:
+        manual = [ManualRegion.parse(spec) for spec in args.add_region]
         options = CensorOptions(method=args.method, block_size=args.block_size, shape=args.shape,
                                 padding=args.padding, fill_color=_parse_color(args.fill_color))
         video_options = VideoOptions(detect_every=args.detect_every,
@@ -369,10 +375,14 @@ def cmd_censor(args) -> int:
                                      max_lost=args.max_lost, smooth=args.smooth,
                                      codec=args.codec, crf=args.crf, preset=args.preset,
                                      audio=not args.no_audio,
-                                     ffmpeg_args=tuple(shlex.split(args.ffmpeg_args)))
+                                     ffmpeg_args=tuple(shlex.split(args.ffmpeg_args)),
+                                     manual=tuple(manual))
     except ValueError as exc:
         raise UsageError(str(exc)) from None
     jobs = collect_inputs(args.inputs, args.suffix if args.output is None else "")
+    if any(m.timed for m in manual) and any(media_kind(src) == "image" for src, _ in jobs):
+        raise UsageError("--add-region with START-END only applies to videos; "
+                         "use x1,y1,x2,y2 for images")
     single = len(jobs) == 1 and jobs[0][1] is None
     plan = []
     for src, base in jobs:
@@ -394,7 +404,8 @@ def cmd_censor(args) -> int:
         try:
             if record["type"] == "image":
                 dets = censor_image(src, dst, detector, options, draw_boxes=args.draw_boxes,
-                                    jpeg_quality=args.jpeg_quality)
+                                    jpeg_quality=args.jpeg_quality,
+                                    manual=[m.box for m in manual])
                 record["detections"] = [d.to_dict() for d in dets]
                 summary = f"{len(dets)} region(s)"
             else:

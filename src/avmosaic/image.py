@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from pathlib import Path
 
 import cv2
@@ -61,10 +62,13 @@ def censor_image(
     *,
     draw_boxes: bool = False,
     jpeg_quality: int = 95,
+    manual: Sequence[tuple[float, float, float, float]] = (),
 ) -> list[Detection]:
+    """Censor one image. ``manual`` boxes (x1, y1, x2, y2) are censored as well."""
     image, detections = detect_image(src, detector)
-    apply_censor(image, detections, options)
+    regions = detections + [Detection("MANUAL", 1.0, *box) for box in manual]
+    apply_censor(image, regions, options)
     if draw_boxes:
-        draw_detections(image, detections)
+        draw_detections(image, regions)
     write_image(dst, image, jpeg_quality)
     return detections

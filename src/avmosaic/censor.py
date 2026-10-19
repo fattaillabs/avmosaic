@@ -195,7 +195,8 @@ def draw_detections(image: np.ndarray, detections: Iterable[Detection]) -> None:
 
     thickness = max(1, round(max(image.shape[:2]) / 500))
     for det in detections:
-        color = (*_BOX_COLORS[LABELS.index(det.label) % len(_BOX_COLORS)], 255)  # opaque on BGRA
+        slot = LABELS.index(det.label) if det.label in LABELS else -1  # -1: marked by hand
+        color = (*_BOX_COLORS[slot % len(_BOX_COLORS)], 255)  # opaque on BGRA
         p1 = (int(det.x1), int(det.y1))
         p2 = (int(det.x2), int(det.y2))
         cv2.rectangle(image, p1, p2, color, thickness)

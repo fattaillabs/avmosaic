@@ -13,6 +13,7 @@ from avmosaic.censor import build_mask, expand_box
 from avmosaic.detector import Detection
 from avmosaic.tracking import (
     HoldPlanner,
+    ManualRegion,
     TrackingPlanner,
     TrackOptions,
     is_scene_cut,
@@ -282,3 +283,56 @@ def test_lookahead_and_order():
         out += [idx for idx, _, _ in planner.push(i, frame_with_object(None), lambda *_: [])]
     out += [idx for idx, _, _ in planner.flush()]
     assert out == list(range(10))
+
+
+# --------------------------------------------------------------------------- marked by hand
+
+
+def test_manual_region_parsing():
+    r = ManualRegion.parse("10,20,110,220")
+    assert r.box == (10, 20, 110, 220) and not r.timed and r.end is None
+    r = ManualRegion.parse("2.3-3.9:120,150,260,330")
+    assert (r.start, r.end, r.box) == (2.3, 3.9, (120, 150, 260, 330)) and r.timed
+    r = ManualRegion.parse("1:02.5-0:01:04:0,0,10,10")
+    assert (r.start, r.end) == (62.5, 64.0)
+    assert ManualRegion.parse("1-2:0,0,10,10").frames(30) == (30, 60, (0, 0, 10, 10))
+    for bad in ("1,2,3", "10,10,5,20", "3-2:0,0,10,10", "a-2:0,0,10,10", "-1,0,10,10"):
+        with pytest.raises(ValueError):
+            ManualRegion.parse(bad)
+
+
+def test_marked_region_is_followed_when_the_detector_never_fires():
+    path = bounce(speed=6)
+    start, end = 5, 30
+    planner = TrackingPlanner(1, TrackOptions(), manual=[(start, end, path(start))])
+    run = Run(planner, 40, path, skip=range(40))  # the detector finds nothing at all
+    assert all(not run.regions[i] for i in range(start))
+    assert min(run.coverage(i) for i in range(start, end + 1)) >= 0.9
+    assert all(r.label == "MANUAL" for i in range(start, end + 1) for r in run.regions[i])
+    assert not any(run.regions[i] for i in range(end + 1, 40))
+
+
+def test_marked_region_holds_through_a_scene_cut():
+    planner = TrackingPlanner(1, TrackOptions(), manual=[(0, 25, (100, 100, 140, 140))])
+    run = Run(planner, 30, lambda i: (100, 100, 140, 140), skip=range(30),
+              scene=lambda i: "a" if i < 12 else "b")
+    assert all(run.regions[i] for i in range(26))
+    assert run.coverage(20) == 1.0  # same place after the cut
+    assert not any(run.regions[i] for i in range(26, 30))
+
+
+def test_marked_region_stays_separate_from_detections():
+    path = bounce(speed=4)
+    planner = TrackingPlanner(1, TrackOptions(), manual=[(0, 19, (0, 0, 30, 30))])
+    run = Run(planner, 20, path)  # the object is detected; the marked box is elsewhere
+    for i in range(20):
+        labels = sorted(r.label for r in run.regions[i])
+        assert labels == ["FEMALE_GENITALIA_EXPOSED", "MANUAL"], (i, labels)
+    assert run.worst_coverage() == 1.0
+
+
+def test_marked_region_without_tracking_stays_put():
+    planner = HoldPlanner(1, 0, manual=[(3, 6, (10, 10, 50, 50))])
+    run = Run(planner, 10, bounce(speed=4), skip=range(10))
+    assert [bool(run.regions[i]) for i in range(10)] == [i in range(3, 7) for i in range(10)]
+    assert all((r.x1, r.y1, r.x2, r.y2) == (10, 10, 50, 50) for i in range(3, 7) for r in run.regions[i])

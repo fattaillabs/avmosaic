@@ -16,8 +16,10 @@ frames have been seen.
 from __future__ import annotations
 
 import bisect
+import re
+import sys
 from collections import deque
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 
 import cv2
@@ -28,6 +30,8 @@ from .detector import Detection
 BoxF = tuple[float, float, float, float]  # x1, y1, x2, y2 in frame pixels
 DetectFn = Callable[[int, np.ndarray], list[Detection]]
 Planned = tuple[int, np.ndarray, list[Detection]]
+ManualFrames = tuple[int, int, BoxF]  # first frame, last frame, box at the first frame
+MANUAL_LABEL = "MANUAL"
 
 FLOW_LONG_SIDE = 480  # optical flow runs on frames downscaled to this long side
 FLOW_GRID = 10  # median-flow samples a 10x10 grid of points inside the box
@@ -55,6 +59,60 @@ class TrackOptions:
         for name in ("max_lost", "backfill", "smooth"):
             if getattr(self, name) < 0:
                 raise ValueError(f"{name} must be >= 0")
+
+
+@dataclass(frozen=True)
+class ManualRegion:
+    """A region a person marked because the detector misses it.
+
+    ``box`` is where the region is at ``start`` (seconds). In a video it is followed
+    with optical flow until ``end`` (None: the end of the video). In an image it is
+    simply censored.
+    """
+
+    box: BoxF
+    start: float = 0.0
+    end: float | None = None
+
+    @property
+    def timed(self) -> bool:
+        return self.start != 0.0 or self.end is not None
+
+    def frames(self, fps: float) -> ManualFrames:
+        last = sys.maxsize if self.end is None else round(self.end * fps)
+        return round(self.start * fps), last, self.box
+
+    @classmethod
+    def parse(cls, text: str) -> ManualRegion:
+        """``x1,y1,x2,y2`` or ``START-END:x1,y1,x2,y2`` (times as 12.5, 1:02.5 or 0:01:02)."""
+        when, _, coords = text.rpartition(":") if re.search(r"-.*:", text) else ("", "", text)
+        try:
+            x1, y1, x2, y2 = (float(v) for v in coords.split(","))
+        except ValueError:
+            raise ValueError(f"invalid region {text!r}; use x1,y1,x2,y2 or START-END:x1,y1,x2,y2") \
+                from None
+        if x2 <= x1 or y2 <= y1 or min(x1, y1) < 0:
+            raise ValueError(f"invalid region {text!r}: need 0 <= x1 < x2 and 0 <= y1 < y2")
+        if not when:
+            return cls((x1, y1, x2, y2))
+        start_text, _, end_text = when.partition("-")
+        start, end = _seconds(start_text), _seconds(end_text)
+        if end <= start:
+            raise ValueError(f"invalid region {text!r}: the end time must be after the start")
+        return cls((x1, y1, x2, y2), start, end)
+
+
+def _seconds(text: str) -> float:
+    try:
+        parts = [float(p) for p in text.strip().split(":")]
+    except ValueError:
+        raise ValueError(f"invalid time {text!r}; use seconds (12.5) or m:ss (1:02.5)") from None
+    if not 1 <= len(parts) <= 3 or any(p < 0 for p in parts):
+        raise ValueError(f"invalid time {text!r}")
+    total = 0.0
+    for part in parts:
+        total = total * 60 + part
+    return total
 
 
 # --------------------------------------------------------------------------- geometry
@@ -158,9 +216,10 @@ def is_scene_cut(prev: np.ndarray, cur: np.ndarray) -> bool:
 class HoldPlanner:
     """Censor the union of all boxes detected within ``hold + every - 1`` frames."""
 
-    def __init__(self, detect_every: int = 1, hold: int = 5):
+    def __init__(self, detect_every: int = 1, hold: int = 5, manual: Sequence[ManualFrames] = ()):
         self.every = detect_every
         self.reach = hold + detect_every - 1
+        self._manual = list(manual)  # without tracking, marked regions stay where they were put
         self._pending: deque[tuple[int, np.ndarray]] = deque()
         self._found: dict[int, list[Detection]] = {}
 
@@ -180,6 +239,8 @@ class HoldPlanner:
         index, frame = self._pending.popleft()
         regions = [d for j in range(index - self.reach, index + self.reach + 1)
                    for d in self._found.get(j, ())]
+        regions += [Detection(MANUAL_LABEL, 1.0, *box) for first, last, box in self._manual
+                    if first <= index <= last]
         for j in [j for j in self._found if j < index - self.reach + 1]:
             del self._found[j]
         return index, frame, regions
@@ -203,6 +264,7 @@ class _Track:
     detections: list[int] = field(default_factory=list)  # recent frame indices, ascending
     det_boxes: dict[int, BoxF] = field(default_factory=dict)  # boxes at those frames
     alive: bool = True
+    manual_until: int | None = None  # set for regions a person marked
 
     @property
     def last_det(self) -> int:
@@ -227,9 +289,11 @@ class _Track:
 
 
 class TrackingPlanner:
-    def __init__(self, detect_every: int = 1, options: TrackOptions | None = None):
+    def __init__(self, detect_every: int = 1, options: TrackOptions | None = None,
+                 manual: Sequence[ManualFrames] = ()):
         self.every = detect_every
         self.options = options or TrackOptions()
+        self._manual = sorted(manual, key=lambda m: m[0])
         # Between two detector runs a track must survive at least every - 1 frames.
         self.max_lost = max(self.options.max_lost, detect_every - 1)
         # Buffering max_lost frames means that when the detector finds a region again
@@ -250,10 +314,14 @@ class TrackingPlanner:
         for track in self.tracks:
             if not track.alive:
                 continue
-            if cut:
-                track.alive = False
-                continue
             box = track.boxes[index - 1]
+            if cut:
+                if track.manual_until is not None:  # a marked region holds its place
+                    track.boxes[index] = box
+                    track.kinds[index] = "hold"
+                else:
+                    track.alive = False
+                continue
             moved = self._flow(self._prev, cur, box)
             if moved is None:
                 # Flow lost it (occlusion, blur, no texture). Cover both "it stopped"
@@ -265,11 +333,25 @@ class TrackingPlanner:
                 track.kinds[index] = "flow"
             track.boxes[index] = moved
 
+        for first, last, box in self._manual:
+            if first == index:
+                track = _Track(MANUAL_LABEL, 1.0, manual_until=last)
+                track.boxes[index] = box
+                track.kinds[index] = "manual"
+                track.add_detection(index, box)
+                self.tracks.append(track)
+
         if index % self.every == 0 or cut:
             self._associate(cur, detect(index, image))
 
         for track in self.tracks:
-            if track.alive and index - track.last_det > self.max_lost:
+            if not track.alive:
+                continue
+            if track.manual_until is not None:
+                ended = index > track.manual_until
+            else:
+                ended = index - track.last_det > self.max_lost
+            if ended:
                 track.alive = False
                 track.boxes.pop(index, None)
                 track.kinds.pop(index, None)
@@ -296,7 +378,7 @@ class TrackingPlanner:
 
     def _associate(self, cur: _Frame, detections: list[Detection]) -> None:
         index = cur.index
-        live = [t for t in self.tracks if t.alive and index in t.boxes]
+        live = [t for t in self.tracks if t.alive and index in t.boxes and t.manual_until is None]
         candidates = []
         for ti, track in enumerate(live):
             for di, det in enumerate(detections):
@@ -384,6 +466,8 @@ class TrackingPlanner:
 
     def _growth(self, track: _Track, index: int) -> float:
         """Extra size for boxes far from any detection of this track (drift margin)."""
+        if track.manual_until is not None:
+            return 0.0  # keep the size a person chose
         dets = track.detections
         pos = bisect.bisect_left(dets, index)
         gaps = [abs(index - dets[k]) for k in (pos - 1, pos) if 0 <= k < len(dets)]
