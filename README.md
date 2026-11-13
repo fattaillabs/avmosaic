@@ -1,12 +1,12 @@
 # avmosaic
 
-Detect explicit regions in images and videos and cover them with a mosaic — from the
+Find sensitive regions in images and videos and cover them with a mosaic, from the
 command line or from Python, on Windows, macOS and Linux.
 
 ![original · detection boxes (--draw-boxes) · mosaic](https://raw.githubusercontent.com/fattaillabs/avmosaic/main/docs/demo.jpg)
 
-*Demo uses the `faces` preset on a public-domain NASA portrait; the default preset
-censors genitalia and the anus.*
+*The demo applies the `faces` preset to a public-domain NASA portrait. The regions the
+default preset covers are listed under `--classes` in Parameters.*
 
 **English** · [한국어](https://github.com/fattaillabs/avmosaic/blob/main/README.ko.md) · [日本語](https://github.com/fattaillabs/avmosaic/blob/main/README.ja.md)
 

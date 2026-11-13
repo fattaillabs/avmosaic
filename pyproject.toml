@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "avmosaic"
 version = "0.1.2"
-description = "Detect and mosaic explicit regions in images and videos (CLI + Python API)."
+description = "Find sensitive regions in images and videos and cover them with a mosaic (CLI + Python API)."
 readme = "README.md"
 requires-python = ">=3.10"
 license = "MIT"
